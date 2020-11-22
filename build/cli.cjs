@@ -1526,37 +1526,36 @@ function createPTauKey(curve, challengeHash, rng) {
 /* global window */
 
 const _revTable = [];
-for (let i=0; i<256; i++) {
+for (let i = 0; i < 256; i++) {
     _revTable[i] = _revSlow(i, 8);
 }
 
 function _revSlow(idx, bits) {
-    let res =0;
+    let res = 0;
     let a = idx;
-    for (let i=0; i<bits; i++) {
+    for (let i = 0; i < bits; i++) {
         res <<= 1;
-        res = res | (a &1);
-        a >>=1;
+        res = res | (a & 1);
+        a >>= 1;
     }
     return res;
 }
 
 
-function log2( V )
-{
-    return( ( ( V & 0xFFFF0000 ) !== 0 ? ( V &= 0xFFFF0000, 16 ) : 0 ) | ( ( V & 0xFF00FF00 ) !== 0 ? ( V &= 0xFF00FF00, 8 ) : 0 ) | ( ( V & 0xF0F0F0F0 ) !== 0 ? ( V &= 0xF0F0F0F0, 4 ) : 0 ) | ( ( V & 0xCCCCCCCC ) !== 0 ? ( V &= 0xCCCCCCCC, 2 ) : 0 ) | ( ( V & 0xAAAAAAAA ) !== 0 ) );
+function log2(V) {
+    return (((V & 0xFFFF0000) !== 0 ? (V &= 0xFFFF0000, 16) : 0) | ((V & 0xFF00FF00) !== 0 ? (V &= 0xFF00FF00, 8) : 0) | ((V & 0xF0F0F0F0) !== 0 ? (V &= 0xF0F0F0F0, 4) : 0) | ((V & 0xCCCCCCCC) !== 0 ? (V &= 0xCCCCCCCC, 2) : 0) | ((V & 0xAAAAAAAA) !== 0));
 }
 
 
 function formatHash(b, title) {
     const a = new DataView(b.buffer, b.byteOffset, b.byteLength);
     let S = "";
-    for (let i=0; i<4; i++) {
-        if (i>0) S += "\n";
+    for (let i = 0; i < 4; i++) {
+        if (i > 0) S += "\n";
         S += "\t\t";
-        for (let j=0; j<4; j++) {
-            if (j>0) S += " ";
-            S += a.getUint32(i*16+j*4).toString(16).padStart(8, "0");
+        for (let j = 0; j < 4; j++) {
+            if (j > 0) S += " ";
+            S += a.getUint32(i * 16 + j * 4).toString(16).padStart(8, "0");
         }
     }
     if (title) S = title + "\n" + S;
@@ -1567,8 +1566,7 @@ function hashIsEqual(h1, h2) {
     if (h1.byteLength != h2.byteLength) return false;
     var dv1 = new Int8Array(h1);
     var dv2 = new Int8Array(h2);
-    for (var i = 0 ; i != h1.byteLength ; i++)
-    {
+    for (var i = 0; i != h1.byteLength; i++) {
         if (dv1[i] != dv2[i]) return false;
     }
     return true;
@@ -1602,7 +1600,7 @@ function askEntropy() {
         });
 
         return new Promise((resolve) => {
-            rl.question("Enter a random text. (Entropy): ", (input) => resolve(input) );
+            rl.question("Enter a random text. (Entropy): ", (input) => resolve(input));
         });
     }
 }
@@ -1619,35 +1617,54 @@ async function getRandomRng(entropy) {
     const hash = Buffer.from(hasher.digest());
 
     const seed = [];
-    for (let i=0;i<8;i++) {
-        seed[i] = hash.readUInt32BE(i*4);
+    for (let i = 0; i < 8; i++) {
+        seed[i] = hash.readUInt32BE(i * 4);
     }
     const rng = new ffjavascript.ChaCha(seed);
     return rng;
 }
 
+
+async function getRandomRngSeed(entropy) {
+    // Generate a random Rng
+    while (!entropy) {
+        entropy = await askEntropy();
+    }
+    const hasher = Blake2b(64);
+    hasher.update(crypto.randomBytes(64));
+    const enc = new TextEncoder(); // always utf-8
+    hasher.update(enc.encode(entropy));
+    const hash = Buffer.from(hasher.digest());
+
+    const seed = [];
+    for (let i = 0; i < 8; i++) {
+        seed[i] = hash.readUInt32BE(i * 4);
+    }
+    return seed;
+}
+
 function rngFromBeaconParams(beaconHash, numIterationsExp) {
     let nIterationsInner;
     let nIterationsOuter;
-    if (numIterationsExp<32) {
+    if (numIterationsExp < 32) {
         nIterationsInner = (1 << numIterationsExp) >>> 0;
         nIterationsOuter = 1;
     } else {
         nIterationsInner = 0x100000000;
-        nIterationsOuter = (1 << (numIterationsExp-32)) >>> 0;
+        nIterationsOuter = (1 << (numIterationsExp - 32)) >>> 0;
     }
 
     let curHash = beaconHash;
-    for (let i=0; i<nIterationsOuter; i++) {
-        for (let j=0; j<nIterationsInner; j++) {
+    for (let i = 0; i < nIterationsOuter; i++) {
+        for (let j = 0; j < nIterationsInner; j++) {
             curHash = crypto.createHash("sha256").update(curHash).digest();
         }
     }
 
     const curHashV = new DataView(curHash.buffer, curHash.byteOffset, curHash.byteLength);
     const seed = [];
-    for (let i=0; i<8; i++) {
-        seed[i] = curHashV.getUint32(i*4, false);
+    for (let i = 0; i < 8; i++) {
+        seed[i] = curHashV.getUint32(i * 4, false);
     }
 
     const rng = new ffjavascript.ChaCha(seed);
@@ -1657,14 +1674,14 @@ function rngFromBeaconParams(beaconHash, numIterationsExp) {
 
 function hex2ByteArray(s) {
     if (s instanceof Uint8Array) return s;
-    if (s.slice(0,2) == "0x") s= s.slice(2);
+    if (s.slice(0, 2) == "0x") s = s.slice(2);
     return new Uint8Array(s.match(/[\da-f]{2}/gi).map(function (h) {
         return parseInt(h, 16);
     }));
 }
 
 function byteArray2hex(byteArray) {
-    return Array.prototype.map.call(byteArray, function(byte) {
+    return Array.prototype.map.call(byteArray, function (byte) {
         return ("0" + (byte & 0xFF).toString(16)).slice(-2);
     }).join("");
 }
@@ -5438,8 +5455,8 @@ async function phase2verify(r1csFileName, pTauFileName, zkeyFileName, logger) {
             if (logger) logger.debug(`H Verificaition(tau):  ${i}/${zkey.domainSize}`);
             const n = Math.min(zkey.domainSize - i, MAX_CHUNK_SIZE);
 
-            const buff1 = await fdPTau.read(sG*n, sectionsPTau[2][0].p + zkey.domainSize*sG + i*MAX_CHUNK_SIZE*sG);
-            const buff2 = await fdPTau.read(sG*n, sectionsPTau[2][0].p + i*MAX_CHUNK_SIZE*sG);
+            const buff1 = await fdPTau.read(sG*n, sectionsPTau[2][0].p + zkey.domainSize*sG + i*sG);
+            const buff2 = await fdPTau.read(sG*n, sectionsPTau[2][0].p + i*sG);
 
             const buffB = await batchSubstract(buff1, buff2);
             const buffS = buff_r.slice(i*zkey.n8r, (i+n)*zkey.n8r);
@@ -5563,7 +5580,7 @@ async function phase2verify(r1csFileName, pTauFileName, zkeyFileName, logger) {
 async function phase2contribute(zkeyNameOld, zkeyNameNew, name, entropy, logger) {
     await Blake2b.ready();
 
-    const {fd: fdOld, sections: sections} = await readBinFile$1(zkeyNameOld, "zkey", 2);
+    const { fd: fdOld, sections: sections } = await readBinFile$1(zkeyNameOld, "zkey", 2);
     const zkey = await readHeader(fdOld, sections, "groth16");
 
     const curve = await getCurveFromQ(zkey.q);
@@ -5577,7 +5594,84 @@ async function phase2contribute(zkeyNameOld, zkeyNameNew, name, entropy, logger)
 
     const transcriptHasher = Blake2b(64);
     transcriptHasher.update(mpcParams.csHash);
-    for (let i=0; i<mpcParams.contributions.length; i++) {
+    for (let i = 0; i < mpcParams.contributions.length; i++) {
+        hashPubKey(transcriptHasher, curve, mpcParams.contributions[i]);
+    }
+
+    const curContribution = {};
+    curContribution.delta = {};
+    curContribution.delta.prvKey = curve.Fr.fromRng(rng);
+    curContribution.delta.g1_s = curve.G1.toAffine(curve.G1.fromRng(rng));
+    curContribution.delta.g1_sx = curve.G1.toAffine(curve.G1.timesFr(curContribution.delta.g1_s, curContribution.delta.prvKey));
+    hashG1(transcriptHasher, curve, curContribution.delta.g1_s);
+    hashG1(transcriptHasher, curve, curContribution.delta.g1_sx);
+    curContribution.transcript = transcriptHasher.digest();
+    curContribution.delta.g2_sp = hashToG2(curve, curContribution.transcript);
+    curContribution.delta.g2_spx = curve.G2.toAffine(curve.G2.timesFr(curContribution.delta.g2_sp, curContribution.delta.prvKey));
+
+    zkey.vk_delta_1 = curve.G1.timesFr(zkey.vk_delta_1, curContribution.delta.prvKey);
+    zkey.vk_delta_2 = curve.G2.timesFr(zkey.vk_delta_2, curContribution.delta.prvKey);
+
+    curContribution.deltaAfter = zkey.vk_delta_1;
+
+    curContribution.type = 0;
+    if (name) curContribution.name = name;
+
+    mpcParams.contributions.push(curContribution);
+
+    await writeHeader(fdNew, zkey);
+
+    // IC
+    await copySection(fdOld, sections, fdNew, 3);
+
+    // Coeffs (Keep original)
+    await copySection(fdOld, sections, fdNew, 4);
+
+    // A Section
+    await copySection(fdOld, sections, fdNew, 5);
+
+    // B1 Section
+    await copySection(fdOld, sections, fdNew, 6);
+
+    // B2 Section
+    await copySection(fdOld, sections, fdNew, 7);
+
+    const invDelta = curve.Fr.inv(curContribution.delta.prvKey);
+    await applyKeyToSection(fdOld, sections, fdNew, 8, curve, "G1", invDelta, curve.Fr.e(1), "L Section", logger);
+    await applyKeyToSection(fdOld, sections, fdNew, 9, curve, "G1", invDelta, curve.Fr.e(1), "H Section", logger);
+
+    await writeMPCParams(fdNew, curve, mpcParams);
+
+    await fdOld.close();
+    await fdNew.close();
+
+    const contributionHasher = Blake2b(64);
+    hashPubKey(contributionHasher, curve, curContribution);
+
+    const contribuionHash = contributionHasher.digest();
+
+    if (logger) logger.info(formatHash(contribuionHash, "Contribution Hash: "));
+
+    return contribuionHash;
+}
+
+async function phase2contributed(zkeyNameOld, zkeyNameNew, name, rng, logger) {
+    await Blake2b.ready();
+
+    const { fd: fdOld, sections: sections } = await readBinFile$1(zkeyNameOld, "zkey", 2);
+    const zkey = await readHeader(fdOld, sections, "groth16");
+
+    const curve = await getCurveFromQ(zkey.q);
+
+    const mpcParams = await readMPCParams(fdOld, curve, sections);
+
+    const fdNew = await createBinFile(zkeyNameNew, "zkey", 1, 10);
+
+
+
+    const transcriptHasher = Blake2b(64);
+    transcriptHasher.update(mpcParams.csHash);
+    for (let i = 0; i < mpcParams.contributions.length; i++) {
         hashPubKey(transcriptHasher, curve, mpcParams.contributions[i]);
     }
 
@@ -6451,13 +6545,25 @@ async function wtnsExportJson(wtnsFileName) {
     You should have received a copy of the GNU General Public License
     along with jaz. If not, see <https://www.gnu.org/licenses/>.
 */
-const {stringifyBigInts: stringifyBigInts$3, unstringifyBigInts: unstringifyBigInts$1} = ffjavascript.utils;
-const logger = Logger.create("snarkJS", {showTimestamp:false});
+const { stringifyBigInts: stringifyBigInts$3, unstringifyBigInts: unstringifyBigInts$1 } = ffjavascript.utils;
+const logger = Logger.create("snarkJS", { showTimestamp: false });
 Logger.setLogLevel("INFO");
 
 const __dirname$2 = path.dirname(new URL((typeof document === 'undefined' ? new (require('u' + 'rl').URL)('file:' + __filename).href : (document.currentScript && document.currentScript.src || new URL('cli.cjs', document.baseURI).href))).pathname);
 
 const commands = [
+
+
+
+
+    {
+        cmd: "powersoftau new <curve> <power> [powersoftau_0000.ptau]",
+        description: "Starts a powers of tau ceremony",
+        alias: ["ptn"],
+        options: "-verbose|v",
+        action: powersOfTauNew
+    },
+
     {
         cmd: "powersoftau new <curve> <power> [powersoftau_0000.ptau]",
         description: "Starts a powers of tau ceremony",
@@ -6585,6 +6691,21 @@ const commands = [
         options: "-verbose|v",
         action: zkeyNew
     },
+
+    {
+        cmd: "zkey genseed",
+        description: "creates a zkey file with a new contribution",
+        alias: ["zkcg"],
+        options: "-verbose|v  -entropy|e -name|n",
+        action: zkeyGenSeed
+    },
+    {
+        cmd: "zkey contributed <circuit_old.zkey> <circuit_new.zkey>",
+        description: "creates a zkey file with a new contribution",
+        alias: ["zkcd"],
+        options: "-verbose|v  -seed|s",
+        action: zkeyContributed
+    },
     {
         cmd: "zkey contribute <circuit_old.zkey> <circuit_new.zkey>",
         description: "creates a zkey file with a new contribution",
@@ -6677,7 +6798,7 @@ const commands = [
 
 
 
-clProcessor(commands).then( (res) => {
+clProcessor(commands).then((res) => {
     process.exit(res);
 }, (err) => {
     logger.error(err);
@@ -6710,24 +6831,24 @@ TODO COMMANDS
 
 function p256(n) {
     let nstr = n.toString(16);
-    while (nstr.length < 64) nstr = "0"+nstr;
+    while (nstr.length < 64) nstr = "0" + nstr;
     nstr = `"0x${nstr}"`;
     return nstr;
 }
 
 function changeExt(fileName, newExt) {
     let S = fileName;
-    while ((S.length>0) && (S[S.length-1] != ".")) S = S.slice(0, S.length-1);
-    if (S.length>0) {
+    while ((S.length > 0) && (S[S.length - 1] != ".")) S = S.slice(0, S.length - 1);
+    if (S.length > 0) {
         return S + newExt;
     } else {
-        return fileName+"."+newExt;
+        return fileName + "." + newExt;
     }
 }
 
 // r1cs export circomJSON [circuit.r1cs] [circuit.json]
 async function r1csInfo$1(params, options) {
-    const r1csName = params[0] ||  "circuit.r1cs";
+    const r1csName = params[0] || "circuit.r1cs";
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
@@ -6853,7 +6974,7 @@ async function groth16Prove$1(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    const {proof, publicSignals} = await groth16Prove(zkeyName, witnessName, logger);
+    const { proof, publicSignals } = await groth16Prove(zkeyName, witnessName, logger);
 
     await fs.promises.writeFile(proofName, JSON.stringify(stringifyBigInts$3(proof), null, 1), "utf-8");
     await fs.promises.writeFile(publicName, JSON.stringify(stringifyBigInts$3(publicSignals), null, 1), "utf-8");
@@ -6874,7 +6995,7 @@ async function groth16FullProve$1(params, options) {
 
     const input = unstringifyBigInts$1(JSON.parse(await fs.promises.readFile(inputName, "utf8")));
 
-    const {proof, publicSignals} = await groth16FullProve(input, wasmName, zkeyName,  logger);
+    const { proof, publicSignals } = await groth16FullProve(input, wasmName, zkeyName, logger);
 
     await fs.promises.writeFile(proofName, JSON.stringify(stringifyBigInts$3(proof), null, 1), "utf-8");
     await fs.promises.writeFile(publicName, JSON.stringify(stringifyBigInts$3(publicSignals), null, 1), "utf-8");
@@ -6951,10 +7072,10 @@ async function zkeyExportSolidityVerifier(params, options) {
 
     let templateName;
     try {
-        templateName = path.join( __dirname$2, "templates", "verifier_groth16.sol");
+        templateName = path.join(__dirname$2, "templates", "verifier_groth16.sol");
         await fs.promises.stat(templateName);
     } catch (err) {
-        templateName = path.join( __dirname$2, "..", "templates", "verifier_groth16.sol");
+        templateName = path.join(__dirname$2, "..", "templates", "verifier_groth16.sol");
     }
 
     const verifierCode = await exportSolidityVerifier(zkeyName, templateName);
@@ -6988,27 +7109,27 @@ async function zkeyExportSolidityCalldata(params, options) {
     const proof = unstringifyBigInts$1(JSON.parse(fs.readFileSync(proofName, "utf8")));
 
     let inputs = "";
-    for (let i=0; i<pub.length; i++) {
+    for (let i = 0; i < pub.length; i++) {
         if (inputs != "") inputs = inputs + ",";
         inputs = inputs + p256(pub[i]);
     }
 
     let S;
     if ((typeof proof.protocol === "undefined") || (proof.protocol == "original")) {
-        S=`[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
-          `[${p256(proof.pi_ap[0])}, ${p256(proof.pi_ap[1])}],` +
-          `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
-          `[${p256(proof.pi_bp[0])}, ${p256(proof.pi_bp[1])}],` +
-          `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
-          `[${p256(proof.pi_cp[0])}, ${p256(proof.pi_cp[1])}],` +
-          `[${p256(proof.pi_h[0])}, ${p256(proof.pi_h[1])}],` +
-          `[${p256(proof.pi_kp[0])}, ${p256(proof.pi_kp[1])}],` +
-          `[${inputs}]`;
-    } else if ((proof.protocol == "groth16")||(proof.protocol == "kimleeoh")) {
-        S=`[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
-          `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
-          `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
-          `[${inputs}]`;
+        S = `[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
+            `[${p256(proof.pi_ap[0])}, ${p256(proof.pi_ap[1])}],` +
+            `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
+            `[${p256(proof.pi_bp[0])}, ${p256(proof.pi_bp[1])}],` +
+            `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
+            `[${p256(proof.pi_cp[0])}, ${p256(proof.pi_cp[1])}],` +
+            `[${p256(proof.pi_h[0])}, ${p256(proof.pi_h[1])}],` +
+            `[${p256(proof.pi_kp[0])}, ${p256(proof.pi_kp[1])}],` +
+            `[${inputs}]`;
+    } else if ((proof.protocol == "groth16") || (proof.protocol == "kimleeoh")) {
+        S = `[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
+            `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
+            `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
+            `[${inputs}]`;
     } else {
         throw new Error("InvalidProof");
     }
@@ -7027,7 +7148,7 @@ async function powersOfTauNew(params, options) {
     curveName = params[0];
 
     power = parseInt(params[1]);
-    if ((power<1) || (power>28)) {
+    if ((power < 1) || (power > 28)) {
         throw new Error("Power must be between 1 and 28");
     }
 
@@ -7134,7 +7255,7 @@ async function powersOfTauBeacon(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await beacon(oldPtauName, newPtauName, options.name ,beaconHashStr, numIterationsExp, logger);
+    return await beacon(oldPtauName, newPtauName, options.name, beaconHashStr, numIterationsExp, logger);
 }
 
 async function powersOfTauContribute(params, options) {
@@ -7146,7 +7267,7 @@ async function powersOfTauContribute(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await contribute(oldPtauName, newPtauName, options.name , options.entropy, logger);
+    return await contribute(oldPtauName, newPtauName, options.name, options.entropy, logger);
 }
 
 async function powersOfTauPreparePhase2(params, options) {
@@ -7180,9 +7301,9 @@ async function powersOfTauTruncate(params, options) {
     ptauName = params[0];
 
     let template = ptauName;
-    while ((template.length>0) && (template[template.length-1] != ".")) template = template.slice(0, template.length-1);
-    template = template.slice(0, template.length-1);
-    template = template+"_";
+    while ((template.length > 0) && (template[template.length - 1] != ".")) template = template.slice(0, template.length - 1);
+    template = template.slice(0, template.length - 1);
+    template = template + "_";
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
@@ -7311,6 +7432,44 @@ async function zkeyVerify(params, options) {
 }
 
 
+
+// zkey contribute <circuit_old.zkey> <circuit_new.zkey>
+async function zkeyGenSeed(params, options) {
+    let zkeyOldName;
+    let zkeyNewName;
+
+    zkeyOldName = params[0];
+    zkeyNewName = params[1];
+
+    if (options.verbose) Logger.setLogLevel("DEBUG");
+
+    let seed = await getRandomRngSeed(options.entropy);
+
+    if (logger) logger.info(`Seed: ${seed}`);
+    return 0;
+}
+
+
+
+// zkey contribute <circuit_old.zkey> <circuit_new.zkey>
+async function zkeyContributed(params, options) {
+    let zkeyOldName;
+    let zkeyNewName;
+
+    zkeyOldName = params[0];
+    zkeyNewName = params[1];
+
+    if (options.verbose) Logger.setLogLevel("DEBUG");
+
+    let seed = options.seed.split(',').map(s => Number(s));
+
+    if (logger) logger.info(`Seed: ${seed}`);
+
+    const rng = new ffjavascript.ChaCha(seed);
+
+    return phase2contributed(zkeyOldName, zkeyNewName, options.name, rng, logger);
+}
+
 // zkey contribute <circuit_old.zkey> <circuit_new.zkey>
 async function zkeyContribute(params, options) {
     let zkeyOldName;
@@ -7338,7 +7497,7 @@ async function zkeyBeacon(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await beacon$1(zkeyOldName, zkeyNewName, options.name ,beaconHashStr, numIterationsExp, logger);
+    return await beacon$1(zkeyOldName, zkeyNewName, options.name, beaconHashStr, numIterationsExp, logger);
 }
 
 

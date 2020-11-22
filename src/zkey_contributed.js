@@ -8,7 +8,7 @@ import * as utils from "./zkey_utils.js";
 import { hashToG2 as hashToG2 } from "./keypair.js";
 import { applyKeyToSection } from "./mpc_applykey.js";
 
-export default async function phase2contribute(zkeyNameOld, zkeyNameNew, name, entropy, logger) {
+export default async function phase2contributed(zkeyNameOld, zkeyNameNew, name, rng, logger) {
     await Blake2b.ready();
 
     const { fd: fdOld, sections: sections } = await binFileUtils.readBinFile(zkeyNameOld, "zkey", 2);
@@ -21,7 +21,6 @@ export default async function phase2contribute(zkeyNameOld, zkeyNameNew, name, e
     const fdNew = await binFileUtils.createBinFile(zkeyNameNew, "zkey", 1, 10);
 
 
-    const rng = await misc.getRandomRng(entropy);
 
     const transcriptHasher = Blake2b(64);
     transcriptHasher.update(mpcParams.csHash);

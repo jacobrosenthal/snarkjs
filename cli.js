@@ -21,7 +21,7 @@
 
 import fs from "fs";
 
-import {readR1cs} from "r1csfile";
+import { readR1cs } from "r1csfile";
 
 import loadSyms from "./src/loadsyms.js";
 import * as r1cs from "./src/r1cs.js";
@@ -30,22 +30,37 @@ import clProcessor from "./src/clprocessor.js";
 
 import * as powersOfTau from "./src/powersoftau.js";
 
-import {  utils }   from "ffjavascript";
-const {stringifyBigInts, unstringifyBigInts} = utils;
+import { utils } from "ffjavascript";
+const { stringifyBigInts, unstringifyBigInts } = utils;
 
 import * as zkey from "./src/zkey.js";
+import * as misc from "./src/misc.js";
 import * as groth16 from "./src/groth16.js";
 import * as wtns from "./src/wtns.js";
 import * as curves from "./src/curves.js";
 import path from "path";
 
+import { ChaCha } from "ffjavascript";
+
 import Logger from "logplease";
-const logger = Logger.create("snarkJS", {showTimestamp:false});
+const logger = Logger.create("snarkJS", { showTimestamp: false });
 Logger.setLogLevel("INFO");
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 const commands = [
+
+
+
+
+    {
+        cmd: "powersoftau new <curve> <power> [powersoftau_0000.ptau]",
+        description: "Starts a powers of tau ceremony",
+        alias: ["ptn"],
+        options: "-verbose|v",
+        action: powersOfTauNew
+    },
+
     {
         cmd: "powersoftau new <curve> <power> [powersoftau_0000.ptau]",
         description: "Starts a powers of tau ceremony",
@@ -173,6 +188,21 @@ const commands = [
         options: "-verbose|v",
         action: zkeyNew
     },
+
+    {
+        cmd: "zkey genseed",
+        description: "creates a zkey file with a new contribution",
+        alias: ["zkcg"],
+        options: "-verbose|v  -entropy|e -name|n",
+        action: zkeyGenSeed
+    },
+    {
+        cmd: "zkey contributed <circuit_old.zkey> <circuit_new.zkey>",
+        description: "creates a zkey file with a new contribution",
+        alias: ["zkcd"],
+        options: "-verbose|v  -seed|s",
+        action: zkeyContributed
+    },
     {
         cmd: "zkey contribute <circuit_old.zkey> <circuit_new.zkey>",
         description: "creates a zkey file with a new contribution",
@@ -265,7 +295,7 @@ const commands = [
 
 
 
-clProcessor(commands).then( (res) => {
+clProcessor(commands).then((res) => {
     process.exit(res);
 }, (err) => {
     logger.error(err);
@@ -298,24 +328,24 @@ TODO COMMANDS
 
 function p256(n) {
     let nstr = n.toString(16);
-    while (nstr.length < 64) nstr = "0"+nstr;
+    while (nstr.length < 64) nstr = "0" + nstr;
     nstr = `"0x${nstr}"`;
     return nstr;
 }
 
 function changeExt(fileName, newExt) {
     let S = fileName;
-    while ((S.length>0) && (S[S.length-1] != ".")) S = S.slice(0, S.length-1);
-    if (S.length>0) {
+    while ((S.length > 0) && (S[S.length - 1] != ".")) S = S.slice(0, S.length - 1);
+    if (S.length > 0) {
         return S + newExt;
     } else {
-        return fileName+"."+newExt;
+        return fileName + "." + newExt;
     }
 }
 
 // r1cs export circomJSON [circuit.r1cs] [circuit.json]
 async function r1csInfo(params, options) {
-    const r1csName = params[0] ||  "circuit.r1cs";
+    const r1csName = params[0] || "circuit.r1cs";
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
@@ -441,7 +471,7 @@ async function groth16Prove(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    const {proof, publicSignals} = await groth16.prove(zkeyName, witnessName, logger);
+    const { proof, publicSignals } = await groth16.prove(zkeyName, witnessName, logger);
 
     await fs.promises.writeFile(proofName, JSON.stringify(stringifyBigInts(proof), null, 1), "utf-8");
     await fs.promises.writeFile(publicName, JSON.stringify(stringifyBigInts(publicSignals), null, 1), "utf-8");
@@ -462,7 +492,7 @@ async function groth16FullProve(params, options) {
 
     const input = unstringifyBigInts(JSON.parse(await fs.promises.readFile(inputName, "utf8")));
 
-    const {proof, publicSignals} = await groth16.fullProve(input, wasmName, zkeyName,  logger);
+    const { proof, publicSignals } = await groth16.fullProve(input, wasmName, zkeyName, logger);
 
     await fs.promises.writeFile(proofName, JSON.stringify(stringifyBigInts(proof), null, 1), "utf-8");
     await fs.promises.writeFile(publicName, JSON.stringify(stringifyBigInts(publicSignals), null, 1), "utf-8");
@@ -539,10 +569,10 @@ async function zkeyExportSolidityVerifier(params, options) {
 
     let templateName;
     try {
-        templateName = path.join( __dirname, "templates", "verifier_groth16.sol");
+        templateName = path.join(__dirname, "templates", "verifier_groth16.sol");
         await fs.promises.stat(templateName);
     } catch (err) {
-        templateName = path.join( __dirname, "..", "templates", "verifier_groth16.sol");
+        templateName = path.join(__dirname, "..", "templates", "verifier_groth16.sol");
     }
 
     const verifierCode = await zkey.exportSolidityVerifier(zkeyName, templateName, logger);
@@ -576,27 +606,27 @@ async function zkeyExportSolidityCalldata(params, options) {
     const proof = unstringifyBigInts(JSON.parse(fs.readFileSync(proofName, "utf8")));
 
     let inputs = "";
-    for (let i=0; i<pub.length; i++) {
+    for (let i = 0; i < pub.length; i++) {
         if (inputs != "") inputs = inputs + ",";
         inputs = inputs + p256(pub[i]);
     }
 
     let S;
     if ((typeof proof.protocol === "undefined") || (proof.protocol == "original")) {
-        S=`[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
-          `[${p256(proof.pi_ap[0])}, ${p256(proof.pi_ap[1])}],` +
-          `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
-          `[${p256(proof.pi_bp[0])}, ${p256(proof.pi_bp[1])}],` +
-          `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
-          `[${p256(proof.pi_cp[0])}, ${p256(proof.pi_cp[1])}],` +
-          `[${p256(proof.pi_h[0])}, ${p256(proof.pi_h[1])}],` +
-          `[${p256(proof.pi_kp[0])}, ${p256(proof.pi_kp[1])}],` +
-          `[${inputs}]`;
-    } else if ((proof.protocol == "groth16")||(proof.protocol == "kimleeoh")) {
-        S=`[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
-          `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
-          `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
-          `[${inputs}]`;
+        S = `[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
+            `[${p256(proof.pi_ap[0])}, ${p256(proof.pi_ap[1])}],` +
+            `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
+            `[${p256(proof.pi_bp[0])}, ${p256(proof.pi_bp[1])}],` +
+            `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
+            `[${p256(proof.pi_cp[0])}, ${p256(proof.pi_cp[1])}],` +
+            `[${p256(proof.pi_h[0])}, ${p256(proof.pi_h[1])}],` +
+            `[${p256(proof.pi_kp[0])}, ${p256(proof.pi_kp[1])}],` +
+            `[${inputs}]`;
+    } else if ((proof.protocol == "groth16") || (proof.protocol == "kimleeoh")) {
+        S = `[${p256(proof.pi_a[0])}, ${p256(proof.pi_a[1])}],` +
+            `[[${p256(proof.pi_b[0][1])}, ${p256(proof.pi_b[0][0])}],[${p256(proof.pi_b[1][1])}, ${p256(proof.pi_b[1][0])}]],` +
+            `[${p256(proof.pi_c[0])}, ${p256(proof.pi_c[1])}],` +
+            `[${inputs}]`;
     } else {
         throw new Error("InvalidProof");
     }
@@ -615,7 +645,7 @@ async function powersOfTauNew(params, options) {
     curveName = params[0];
 
     power = parseInt(params[1]);
-    if ((power<1) || (power>28)) {
+    if ((power < 1) || (power > 28)) {
         throw new Error("Power must be between 1 and 28");
     }
 
@@ -722,7 +752,7 @@ async function powersOfTauBeacon(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await powersOfTau.beacon(oldPtauName, newPtauName, options.name ,beaconHashStr, numIterationsExp, logger);
+    return await powersOfTau.beacon(oldPtauName, newPtauName, options.name, beaconHashStr, numIterationsExp, logger);
 }
 
 async function powersOfTauContribute(params, options) {
@@ -734,7 +764,7 @@ async function powersOfTauContribute(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await powersOfTau.contribute(oldPtauName, newPtauName, options.name , options.entropy, logger);
+    return await powersOfTau.contribute(oldPtauName, newPtauName, options.name, options.entropy, logger);
 }
 
 async function powersOfTauPreparePhase2(params, options) {
@@ -768,9 +798,9 @@ async function powersOfTauTruncate(params, options) {
     ptauName = params[0];
 
     let template = ptauName;
-    while ((template.length>0) && (template[template.length-1] != ".")) template = template.slice(0, template.length-1);
-    template = template.slice(0, template.length-1);
-    template = template+"_";
+    while ((template.length > 0) && (template[template.length - 1] != ".")) template = template.slice(0, template.length - 1);
+    template = template.slice(0, template.length - 1);
+    template = template + "_";
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
@@ -899,6 +929,44 @@ async function zkeyVerify(params, options) {
 }
 
 
+
+// zkey contribute <circuit_old.zkey> <circuit_new.zkey>
+async function zkeyGenSeed(params, options) {
+    let zkeyOldName;
+    let zkeyNewName;
+
+    zkeyOldName = params[0];
+    zkeyNewName = params[1];
+
+    if (options.verbose) Logger.setLogLevel("DEBUG");
+
+    let seed = await misc.getRandomRngSeed(options.entropy);
+
+    if (logger) logger.info(`Seed: ${seed}`);
+    return 0;
+}
+
+
+
+// zkey contribute <circuit_old.zkey> <circuit_new.zkey>
+async function zkeyContributed(params, options) {
+    let zkeyOldName;
+    let zkeyNewName;
+
+    zkeyOldName = params[0];
+    zkeyNewName = params[1];
+
+    if (options.verbose) Logger.setLogLevel("DEBUG");
+
+    let seed = options.seed.split(',').map(s => Number(s));
+
+    if (logger) logger.info(`Seed: ${seed}`);
+
+    const rng = new ChaCha(seed);
+
+    return zkey.contributed(zkeyOldName, zkeyNewName, options.name, rng, logger);
+}
+
 // zkey contribute <circuit_old.zkey> <circuit_new.zkey>
 async function zkeyContribute(params, options) {
     let zkeyOldName;
@@ -926,7 +994,7 @@ async function zkeyBeacon(params, options) {
 
     if (options.verbose) Logger.setLogLevel("DEBUG");
 
-    return await zkey.beacon(zkeyOldName, zkeyNewName, options.name ,beaconHashStr, numIterationsExp, logger);
+    return await zkey.beacon(zkeyOldName, zkeyNewName, options.name, beaconHashStr, numIterationsExp, logger);
 }
 
 
